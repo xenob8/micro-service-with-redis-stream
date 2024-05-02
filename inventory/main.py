@@ -1,22 +1,32 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis_om import get_redis_connection, HashModel
+from fastapi.background import BackgroundTasks
+
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=['http://localhost:3000'],
-    allow_methods=['*'],
-    allow_headers=['*']
-)
-
-redis = get_redis_connection(
-    host="redis-11844.c135.eu-central-1-1.ec2.cloud.redislabs.com",
-    port=11844,
-    password="pRdcpRkKPFn6UnEFskrDGxrmFbf5T9ER",
+redis_stream = get_redis_connection(
+    host=os.getenv("REDIS_STREAM_HOST") or "127.0.0.1",
+    port=os.getenv("REDIS_STREAM_PORT") or 8005,
     decode_responses=True
 )
+
+redis_host = os.getenv('REDIS_INVENTORY_HOST')
+redis_port = os.getenv("REDIS_INVENTORY_PORT")
+
+redis = get_redis_connection(
+    host=redis_host or "127.0.0.1",
+    port=redis_port or 8081,
+    # password="pRdcpRkKPFn6UnEFskrDGxrmFbf5T9ER",
+    decode_responses=True
+)
+
+
+
+
 
 
 class Product(HashModel):
@@ -30,6 +40,7 @@ class Product(HashModel):
 
 @app.get('/products')
 def all():
+    print(123)
     return [format(pk) for pk in Product.all_pks()]
 
 
@@ -57,3 +68,8 @@ def get(pk: str):
 @app.delete('/products/{pk}')
 def delete(pk: str):
     return Product.delete(pk)
+
+
+
+
+

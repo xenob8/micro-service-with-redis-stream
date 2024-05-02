@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.background import BackgroundTasks
@@ -7,21 +9,20 @@ import requests, time
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=['http://localhost:3000'],
-    allow_methods=['*'],
-    allow_headers=['*']
-)
-
-# This should be a different database
-redis = get_redis_connection(
-    host="redis-11844.c135.eu-central-1-1.ec2.cloud.redislabs.com",
-    port=11844,
-    password="pRdcpRkKPFn6UnEFskrDGxrmFbf5T9ER",
+redis_stream = get_redis_connection(
+    host=os.getenv("REDIS_STREAM_HOST") or "127.0.0.1",
+    port=os.getenv("REDIS_STREAM_PORT") or 8005,
     decode_responses=True
 )
 
+redis_host = os.getenv('REDIS_PAYMENT_HOST')
+redis_port = os.getenv("REDIS_PAYMENT_PORT")
+
+redis = get_redis_connection(
+    host=redis_host or "127.0.0.1",
+    port=redis_port or 8081,
+    decode_responses=True
+)
 
 class Order(HashModel):
     product_id: str
@@ -35,6 +36,7 @@ class Order(HashModel):
         database = redis
 
 
+
 @app.get('/orders/{pk}')
 def get(pk: str):
     return Order.get(pk)
@@ -43,8 +45,10 @@ def get(pk: str):
 @app.post('/orders')
 async def create(request: Request, background_tasks: BackgroundTasks):  # id, quantity
     body = await request.json()
-
-    req = requests.get('http://localhost:8000/products/%s' % body['id'])
+    inventory_host = os.getenv("INVENTORY_HOST")
+    inventory_port = os.getenv("INVENTORY_PORT")
+    url = f'http://{inventory_host}:{inventory_port}/products/{body["id"]}'
+    req = requests.get(url)
     product = req.json()
 
     order = Order(
@@ -66,4 +70,4 @@ def order_completed(order: Order):
     time.sleep(5)
     order.status = 'completed'
     order.save()
-    redis.xadd('order_completed', order.dict(), '*')
+    redis_stream.xadd('order_completed', order.dict(), '*')

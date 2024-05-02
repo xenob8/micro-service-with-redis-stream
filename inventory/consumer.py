@@ -1,17 +1,10 @@
-from main import redis, Product
-import time
+from main import redis_stream, Product
 
 key = 'order_completed'
-group = 'inventory-group'
-
-try:
-    redis.xgroup_create(key, group)
-except:
-    print('Group already exists!')
 
 while True:
     try:
-        results = redis.xreadgroup(group, key, {key: '>'}, None)
+        results = redis_stream.xread({key: "$"}, block=1000, count=5)
 
         if results != []:
             for result in results:
@@ -21,8 +14,7 @@ while True:
                     product.quantity = product.quantity - int(obj['quantity'])
                     product.save()
                 except:
-                    redis.xadd('refund_order', obj, '*')
+                    redis_stream.xadd('refund_order', obj, '*')
 
     except Exception as e:
         print(str(e))
-    time.sleep(1)
